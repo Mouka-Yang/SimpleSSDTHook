@@ -20,8 +20,8 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{691E55AB-2E9B-4443-9684-66ADB68DB7DB}</ProjectGuid>
-    <RootNamespace>SimpleSSDTHook</RootNamespace>
+    <ProjectGuid>{9FFE9E37-60B8-47B0-8172-D5D06FEC49EB}</ProjectGuid>
+    <RootNamespace>UserClient</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -115,6 +115,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="client.h" />
+    <ClInclude Include="drvctl.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="drvctl.c" />
+    <ClCompile Include="client.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
