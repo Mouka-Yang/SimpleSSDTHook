@@ -1,0 +1,86 @@
+;
+; MyDriver.inf
+;
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=Sample ; TODO: edit Class
+ClassGuid={78A1C341-4539-11d3-B88D-00C04FAD5171} ; TODO: edit ClassGuid
+Provider=%ManufacturerName%
+CatalogFile=MyDriver.cat
+DriverVer= ; TODO: set DriverVer in stampinf property pages
+
+[DestinationDirs]
+DefaultDestDir = 12
+MyDriver_Device_CoInstaller_CopyFiles = 11
+
+; ================= Class section =====================
+
+[ClassInstall32]
+Addreg=SampleClassReg
+
+[SampleClassReg]
+HKR,,,0,%ClassName%
+HKR,,Icon,,-5
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+MyDriver.sys  = 1,,
+WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll=1 ; make sure the number matches with SourceDisksNames
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName%=Standard,NT$ARCH$
+
+[Standard.NT$ARCH$]
+%MyDriver.DeviceDesc%=MyDriver_Device, Root\MyDriver ; TODO: edit hw-id
+
+[MyDriver_Device.NT]
+CopyFiles=Drivers_Dir
+
+[Drivers_Dir]
+MyDriver.sys
+
+;-------------- Service installation
+[MyDriver_Device.NT.Services]
+AddService = MyDriver,%SPSVCINST_ASSOCSERVICE%, MyDriver_Service_Inst
+
+; -------------- MyDriver driver install sections
+[MyDriver_Service_Inst]
+DisplayName    = %MyDriver.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\MyDriver.sys
+
+;
+;--- MyDriver_Device Coinstaller installation ------
+;
+
+[MyDriver_Device.NT.CoInstallers]
+AddReg=MyDriver_Device_CoInstaller_AddReg
+CopyFiles=MyDriver_Device_CoInstaller_CopyFiles
+
+[MyDriver_Device_CoInstaller_AddReg]
+HKR,,CoInstallers32,0x00010000, "WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll,WdfCoInstaller"
+
+[MyDriver_Device_CoInstaller_CopyFiles]
+WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll
+
+[MyDriver_Device.NT.Wdf]
+KmdfService =  MyDriver, MyDriver_wdfsect
+[MyDriver_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+[Strings]
+SPSVCINST_ASSOCSERVICE= 0x00000002
+ManufacturerName="<Your manufacturer name>" ;TODO: Replace with your manufacturer name
+ClassName="Samples" ; TODO: edit ClassName
+DiskName = "MyDriver Installation Disk"
+MyDriver.DeviceDesc = "MyDriver Device"
+MyDriver.SVCDESC = "MyDriver Service"

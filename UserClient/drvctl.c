@@ -2,11 +2,13 @@
 #include <stdlib.h>
 #include <tchar.h>
 #include <strsafe.h>
+
 #include "drvctl.h"
+#include "devio.h"
 
+HANDLE g_hDevice = INVALID_HANDLE_VALUE;
 
-
-BOOLEAN 
+BOOLEAN
 SetupDriverPath(
 	_Out_writes_(MAX_PATH) LPTSTR DriverPath)
 {
@@ -17,7 +19,7 @@ SetupDriverPath(
 	drvPathLen = GetCurrentDirectory(
 		MAX_PATH,
 		DriverPath);
-	
+
 	if (!drvPathLen)
 	{
 		ErrorExit(_T("GetCurrentDirectory failed!\n"));
@@ -30,7 +32,7 @@ SetupDriverPath(
 		_T("\\%s.sys"),
 		DRIVER_NAME) != S_OK)
 	{
-		ErrorExit("Generate Driver Path failed!\n");
+		ErrorExit(_T("Generate Driver Path failed!\n"));
 	}
 
 	// Ensure driver file is in the specified directory
@@ -46,7 +48,7 @@ SetupDriverPath(
 		_tprintf(_T("Driver is not in the current directory!\n"));
 		exit(1);
 	}
-	
+
 	if (fHandle)
 	{
 		CloseHandle(fHandle);
@@ -55,7 +57,7 @@ SetupDriverPath(
 	return TRUE;
 }	// SetupDriverPath
 
-BOOLEAN
+VOID
 InstallDriver(
 	IN	SC_HANDLE SchSCManager,
 	IN LPCTSTR	DriverName,
@@ -86,7 +88,8 @@ InstallDriver(
 		if (err == ERROR_SERVICE_EXISTS)
 		{
 			// Ignore thes error
-			return TRUE;
+			_tprintf("The Service is already installed.\n");
+			return;
 		}
 		else
 		{
@@ -100,16 +103,15 @@ InstallDriver(
 		CloseServiceHandle(schService);
 	}
 
-	return TRUE;
+	_tprintf(_T("Install driver successfully.\n"));
 }	 // InstallDriver
 
-BOOLEAN
+VOID
 RemoveDriver(
 	IN SC_HANDLE SchSCManager,
 	IN LPCTSTR	Drivername)
 {
 	SC_HANDLE	schService;
-	BOOLEAN		rCode;
 
 	// Open the handle to the existing service
 	schService = OpenService(
@@ -122,14 +124,9 @@ RemoveDriver(
 		ErrorExit(_T("OpenService failed!\n"));
 	}
 
-	if (DeleteService(schService))
-	{
-		rCode = TRUE;
-	}
-	else
+	if (!DeleteService(schService))
 	{
 		ErrorExit(_T("DeleteService failed!\n"));
-		rCode = FALSE;
 	}
 
 	if (schService)
@@ -137,10 +134,11 @@ RemoveDriver(
 		CloseServiceHandle(schService);
 	}
 
-	return rCode;
+	_tprintf(_T("Driver removed successfully.\n"));
+	return;
 }	// RemoveDriver
 
-BOOLEAN
+VOID
 StartDriver(
 	IN SC_HANDLE	SchSCManager,
 	IN LPCTSTR		DriverName)
@@ -171,7 +169,8 @@ StartDriver(
 		if (err == ERROR_SERVICE_ALREADY_RUNNING)
 		{
 			// Ignore this error
-			return TRUE;
+			_tprintf(_T("The service is already running!\n"));
+			return;
 		}
 		else
 		{
@@ -183,15 +182,16 @@ StartDriver(
 	{
 		CloseServiceHandle(schService);
 	}
-	return	TRUE;
+
+	_tprintf(_T("Start driver successfully.\n"));
+	return;
 }	// StartDriver
 
-BOOLEAN
+VOID
 StopDriver(
 	IN SC_HANDLE	SchSCManager,
 	IN LPCTSTR		DriverName)
 {
-	BOOLEAN rCode = TRUE;
 	SC_HANDLE	schService;
 	SERVICE_STATUS ss;
 
@@ -206,15 +206,23 @@ StopDriver(
 
 	}
 
+	// Query if  the service is running
+	if (!(QueryServiceStatus(schService, &ss)))
+	{
+		ErrorExit(_T("QueryServiceStatus failed!\n"));
+	}
+	else if (ss.dwCurrentState == SERVICE_STOPPED)
+	{
+		// if the service is not running then exit.
+		_tprintf(_T("The service is not running.\n"));
+		return;
+	}
+
 	// Request the service to stop
-	if (ControlService(
+	if (!ControlService(
 		schService,
 		SERVICE_CONTROL_STOP,
 		&ss))
-	{
-		rCode = TRUE;
-	}
-	else
 	{
 		ErrorExit(_T("ControlService failed!\n"));
 	}
@@ -224,10 +232,11 @@ StopDriver(
 		CloseServiceHandle(schService);
 	}
 
-	return rCode;
+	_tprintf(_T("Stop driver successfully.\n"));
+	return;
 }	// StopDriver
 
-BOOLEAN 
+BOOLEAN
 ManageDriver(
 	IN LPCTSTR	DriverName,
 	IN LPCTSTR	DriverPath,
@@ -236,6 +245,9 @@ ManageDriver(
 {
 	SC_HANDLE	schSCManager;
 	BOOLEAN	rCode = TRUE;
+
+	TCHAR buffer[200] = { 0 };
+	//HANDLE static hFile = INVALID_HANDLE_VALUE;
 
 	if (!DriverName || !DriverPath)
 	{
@@ -260,17 +272,14 @@ ManageDriver(
 	{
 	case FUNC_SETUP_SERVICE:
 		// Install the driver service
-		if (!InstallDriver(
+		InstallDriver(
 			schSCManager,
 			DriverName,
-			DriverPath))
-		{
-			ErrorExit(_T("Install driver as service failed!\n"));
-		}
+			DriverPath);
 		break;
 
 	case FUNC_DELETE_SERVICE:
-		// Stop the driver before delete
+		// Stop the driver before delet
 		StopDriver(
 			schSCManager,
 			DriverName);
@@ -279,17 +288,12 @@ ManageDriver(
 		RemoveDriver(
 			schSCManager,
 			DriverName);
-
-		rCode = TRUE;
 		break;
 
 	case FUNC_START_SERVICE:
-		if (!StartDriver(
+		StartDriver(
 			schSCManager,
-			DriverName))
-		{
-			ErrorExit(_T("Start driver  service failed!\n"));
-		}
+			DriverName);
 		break;
 
 	case FUNC_STOP_SERVICE:
@@ -297,12 +301,22 @@ ManageDriver(
 		StopDriver(
 			schSCManager,
 			DriverName);
+		break;
 
+	case FUNC_WRITE_IO:
+		WriteToDevice(g_hDevice, buffer);
+		break;
+
+	case FUNC_OPEN_IO:
+		OpenIoHandle(&g_hDevice);
+		break;
+
+	case FUNC_CLOSE_IO:
+		CloseIoHandle(g_hDevice);
 		break;
 
 	default:
 		_tprintf(_T("Unknown command argument!\n"));
-		rCode = FALSE;
 		break;
 	}
 
@@ -314,7 +328,7 @@ ManageDriver(
 }	// ManageDriver
 
 
-VOID ErrorExit(LPCSTR lpszFunction)
+VOID ErrorExit(LPCTSTR lpszFunction)
 {
 	// Retrieve the system error message for the last-error code
 
@@ -341,9 +355,58 @@ VOID ErrorExit(LPCSTR lpszFunction)
 		TEXT("%s ---- error code %d: %s"),
 		lpszFunction, dw, lpMsgBuf);
 	//MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK);
-	_tprintf((LPCSTR)lpDisplayBuf);
+	_tprintf((LPCTSTR)lpDisplayBuf);
 
 	LocalFree(lpMsgBuf);
 	LocalFree(lpDisplayBuf);
+
+	system("PAUSE");
 	ExitProcess(dw);
 }
+
+
+// Reinstall service
+// Try to delete the service first
+//if (!StopDriver(
+//	SchSCManager,
+//	DriverName))
+//{
+//	ErrorExit(_T("Stop driver failed!\n"));
+//}
+//
+//// Remove driver
+//if (!RemoveDriver(
+//	SchSCManager,
+//	DriverName))
+//{
+//	ErrorExit(_T("Remove driver failed!\n"));
+//}
+//else
+//{
+//	_tprintf(_T("Driver removed successfully.\n"));
+//}
+// Then install the service
+//schService = CreateService(
+//	SchSCManager,
+//	DriverName,
+//	DriverName,
+//	SERVICE_ALL_ACCESS,
+//	SERVICE_KERNEL_DRIVER,
+//	SERVICE_DEMAND_START,
+//	SERVICE_ERROR_NORMAL,
+//	DriverPath,
+//	NULL,
+//	NULL,
+//	NULL,
+//	NULL,
+//	NULL
+//);
+//if (!schService)
+//{
+//	ErrorExit(_T("CreateService failed! \n"));
+//}
+//
+//if (schService)
+//{
+//	CloseServiceHandle(schService);
+//}
